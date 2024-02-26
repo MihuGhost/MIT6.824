@@ -23,6 +23,8 @@ func Map(filename string, contents string) []mr.KeyValue {
 	ff := func(r rune) bool { return !unicode.IsLetter(r) }
 
 	// split contents into an array of words.
+	//分割 得到数组切片
+	//单词遍历放入kv  value都为1
 	words := strings.FieldsFunc(contents, ff)
 
 	kva := []mr.KeyValue{}
@@ -38,6 +40,7 @@ func Map(filename string, contents string) []mr.KeyValue {
 // map tasks, with a list of all the values created for that key by
 // any map task.
 //
+// word 频次
 func Reduce(key string, values []string) string {
 	// return the number of occurrences of this word.
 	return strconv.Itoa(len(values))

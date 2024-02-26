@@ -23,11 +23,13 @@ func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 func main() {
+	//接收命令行参数
 	if len(os.Args) < 3 {
 		fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
 		os.Exit(1)
 	}
 
+	//加在ac.so
 	mapf, reducef := loadPlugin(os.Args[1])
 
 	//
@@ -36,6 +38,7 @@ func main() {
 	// accumulate the intermediate Map output.
 	//
 	intermediate := []mr.KeyValue{}
+	//遍历txt
 	for _, filename := range os.Args[2:] {
 		file, err := os.Open(filename)
 		if err != nil {
@@ -46,7 +49,10 @@ func main() {
 			log.Fatalf("cannot read %v", filename)
 		}
 		file.Close()
+
+		//wc.go 中方法执行
 		kva := mapf(filename, string(content))
+		//所有txt中的word切分出来 [word ,1]
 		intermediate = append(intermediate, kva...)
 	}
 
@@ -56,6 +62,7 @@ func main() {
 	// rather than being partitioned into NxM buckets.
 	//
 
+	//字典排序
 	sort.Sort(ByKey(intermediate))
 
 	oname := "mr-out-0"
@@ -65,9 +72,11 @@ func main() {
 	// call Reduce on each distinct key in intermediate[],
 	// and print the result to mr-out-0.
 	//
+	//组装 统计word出现频次
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
+		//相同词累加
 		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
 			j++
 		}

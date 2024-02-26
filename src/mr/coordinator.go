@@ -46,8 +46,8 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	ret := false
-
+	// ret := false
+	ret := true
 	// Your code here.
 
 
