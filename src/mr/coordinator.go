@@ -1,15 +1,29 @@
 package mr
 
+//go run -race mrcoordinator.go pg-*.txt
+import "fmt"
 import "log"
 import "net"
 import "os"
 import "net/rpc"
 import "net/http"
 
-
+//1.命令行传入参数传给worker
 type Coordinator struct {
 	// Your definitions here.
+}
 
+func (c *Coordinator) GetFileName(args *ExampleArgs, replay *ExampleReply) error{
+		//接收命令行参数
+		if len(os.Args) < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
+			os.Exit(1)
+		}
+
+		for _, filename := range os.Args[1:] {
+			replay.Reply += filename 
+		}
+		return nil
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -31,7 +45,6 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 func (c *Coordinator) server() {
 	rpc.Register(c)
 	rpc.HandleHTTP()
-	//l, e := net.Listen("tcp", ":1234")
 	sockname := coordinatorSock()
 	os.Remove(sockname)
 	l, e := net.Listen("unix", sockname)
@@ -49,8 +62,6 @@ func (c *Coordinator) Done() bool {
 	// ret := false
 	ret := true
 	// Your code here.
-
-
 	return ret
 }
 

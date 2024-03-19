@@ -34,7 +34,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+	CallExample()
 
 }
 
@@ -50,7 +50,7 @@ func CallExample() {
 
 	// fill in the argument(s).
 	args.X = 99
-
+	args.Args = "test"
 	// declare a reply structure.
 	reply := ExampleReply{}
 
@@ -58,10 +58,11 @@ func CallExample() {
 	// the "Coordinator.Example" tells the
 	// receiving server that we'd like to call
 	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
+	// ok := call("Coordinator.Example", &args, &reply)
+	ok := call("Coordinator.GetFileName", &args, &reply)
 	if ok {
 		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
+		fmt.Printf("reply.Reply %v\n", reply.Reply)
 	} else {
 		fmt.Printf("call failed!\n")
 	}
@@ -73,7 +74,6 @@ func CallExample() {
 // returns false if something goes wrong.
 //
 func call(rpcname string, args interface{}, reply interface{}) bool {
-	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
 	sockname := coordinatorSock()
 	c, err := rpc.DialHTTP("unix", sockname)
 	if err != nil {
