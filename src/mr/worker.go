@@ -9,6 +9,7 @@ import "hash/fnv"
 import "os"
 import "io/ioutil"
 import "sort"
+import "bufio"
 
 //
 // Map functions return a slice of KeyValue.
@@ -35,9 +36,18 @@ func ihash(key string) int {
 
 
 //
-// main/mrworker.go calls this function.
-//
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	mapStatus := doMapf(mapf)
+	if mapStatus {
+		
+	}else{
+		log.Fatal("doMapf error")
+	}
+
+}
+
+//Map切分，输出为一个文件
+func doMapf(mapf func(string, string) []KeyValue) bool{
 	intermediate := []KeyValue{}
 	filenames := ReqFileName()
 
@@ -45,10 +55,12 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 		file, err := os.Open(filename)
 		if err != nil {
 			log.Fatalf("cannot open %v", filename)
+			return false
 		}
 		content, err := ioutil.ReadAll(file)
 		if err != nil {
 			log.Fatalf("cannot read %v", filename)
+			return false
 		}
 		file.Close()
 
@@ -66,18 +78,37 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 		_,err := ofile.WriteString(v.Key+" "+v.Value+"\n")
 		if err != nil {
 			fmt.Println("Error writing to file:", err)
-            return
+            return false
 		}
 	}
-
-	fmt.Println("Data written successfully.")
+	fmt.Println("DoMapf successfully.")
+	return true
 }
 
-//
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
+//Reduce任务处理
+func doReducef(reducef func(string, []string) string) bool{
+	file,err := os.Open("mr-out-0")
+	if err != nil{
+		log.Fatal("doReducef error, file open error")
+		return false
+	}
+
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	// for scanner.Scan() {
+	// 	line := scanner.Text()
+		
+	// }
+
+	if err := scanner.Err(); err != nil {
+        fmt.Println("Error reading file:", err)
+        return false
+    }
+
+	return true
+}
+
 //获得文件名
 func ReqFileName() ([]string) {
 	req := Req{}
@@ -92,10 +123,6 @@ func ReqFileName() ([]string) {
 	return nil
 }
 
-//
-// send an RPC request to the coordinator, wait for the response.
-// usually returns true.
-// returns false if something goes wrong.
 //
 func call(rpcname string, args interface{}, reply interface{}) bool {
 	sockname := coordinatorSock()

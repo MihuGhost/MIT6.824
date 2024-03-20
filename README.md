@@ -8,3 +8,5 @@ go run -race mrcoordinator.go pg-*.txt
 
 go build -race -buildmode=plugin -gcflags="all=-N -l"  ../mrapps/wc.go
 rm wc.so
+
+https://github.com/MihuGhost/MIT6.824.git
