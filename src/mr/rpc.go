@@ -16,12 +16,20 @@ import "strconv"
 
 type ExampleArgs struct {
 	X int
-	Args string
+	Args []string
 }
 
 type ExampleReply struct {
 	Y int
-	Reply string
+	Reply []string
+}
+
+type Req struct {
+	Args []string
+}
+
+type Resp struct {
+	Args []string
 }
 
 // Add your RPC definitions here.

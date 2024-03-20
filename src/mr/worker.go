@@ -1,10 +1,14 @@
 package mr
 
+//go run -race mrworker.go wc.so
+
 import "fmt"
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
+import "os"
+import "io/ioutil"
+import "sort"
 
 //
 // Map functions return a slice of KeyValue.
@@ -13,6 +17,11 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+
+type ByKey []KeyValue
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 //
 // use ihash(key) % NReduce to choose the reduce
@@ -28,14 +37,40 @@ func ihash(key string) int {
 //
 // main/mrworker.go calls this function.
 //
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
+func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	intermediate := []KeyValue{}
+	filenames := ReqFileName()
 
-	// Your worker implementation here.
+	for _, filename := range filenames {
+		file, err := os.Open(filename)
+		if err != nil {
+			log.Fatalf("cannot open %v", filename)
+		}
+		content, err := ioutil.ReadAll(file)
+		if err != nil {
+			log.Fatalf("cannot read %v", filename)
+		}
+		file.Close()
 
-	// uncomment to send the Example RPC to the coordinator.
-	CallExample()
+		kva := mapf(filename, string(content))
 
+		intermediate = append(intermediate, kva...)
+	}
+
+	sort.Sort(ByKey(intermediate))
+	oname := "mr-out-0"
+	ofile, _ := os.Create(oname)
+	defer ofile.Close()
+	
+	for _, v := range intermediate {
+		_,err := ofile.WriteString(v.Key+" "+v.Value+"\n")
+		if err != nil {
+			fmt.Println("Error writing to file:", err)
+            return
+		}
+	}
+
+	fmt.Println("Data written successfully.")
 }
 
 //
@@ -43,29 +78,18 @@ func Worker(mapf func(string, string) []KeyValue,
 //
 // the RPC argument and reply types are defined in rpc.go.
 //
-func CallExample() {
+//获得文件名
+func ReqFileName() ([]string) {
+	req := Req{}
+	resp := Resp{}
 
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-	args.Args = "test"
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	// ok := call("Coordinator.Example", &args, &reply)
-	ok := call("Coordinator.GetFileName", &args, &reply)
+	ok := call("Coordinator.ProvideFileName", &req, &resp)
 	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Reply %v\n", reply.Reply)
-	} else {
-		fmt.Printf("call failed!\n")
+		return resp.Args
+	}else{
+		log.Fatal("ReqFileName error")
 	}
+	return nil
 }
 
 //

@@ -13,31 +13,20 @@ type Coordinator struct {
 	// Your definitions here.
 }
 
-func (c *Coordinator) GetFileName(args *ExampleArgs, replay *ExampleReply) error{
-		//接收命令行参数
+//获取文件名称
+func (c *Coordinator) ProvideFileName(req *Req, resp *Resp) error{
 		if len(os.Args) < 2 {
 			fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
 			os.Exit(1)
 		}
 
 		for _, filename := range os.Args[1:] {
-			replay.Reply += filename 
+			resp.Args = append(resp.Args,filename)
 		}
 		return nil
 }
 
 // Your code here -- RPC handlers for the worker to call.
-
-//
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
-
 
 //
 // start a thread that listens for RPCs from worker.go

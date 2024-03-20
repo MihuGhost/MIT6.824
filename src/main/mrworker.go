@@ -27,10 +27,7 @@ func main() {
 	mr.Worker(mapf, reducef)
 }
 
-//
-// load the application Map and Reduce functions
-// from a plugin file, e.g. ../mrapps/wc.so
-//
+//插件加载
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
