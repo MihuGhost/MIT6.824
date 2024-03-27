@@ -10,6 +10,7 @@ import "os"
 import "io/ioutil"
 import "sort"
 import "bufio"
+import "strconv"
 
 //
 // Map functions return a slice of KeyValue.
@@ -36,7 +37,7 @@ func ihash(key string) int {
 
 
 //
-func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+func Worker(mapf func(string, string) []string, reducef func(string, int) string) {
 	mapStatus := doMapf(mapf)
 	if mapStatus {
 		
@@ -47,35 +48,50 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 }
 
 //Map切分，输出为一个文件
-func doMapf(mapf func(string, string) []KeyValue) bool{
-	intermediate := []KeyValue{}
+func doMapf(mapf func(string, string) []string) bool{
 	filenames := ReqFileName()
 
-	for _, filename := range filenames {
+	intermediate := []string{}
+	//遍历txt
+	/*
+	for _, filename := range os.Args[2:] {
 		file, err := os.Open(filename)
 		if err != nil {
 			log.Fatalf("cannot open %v", filename)
-			return false
 		}
 		content, err := ioutil.ReadAll(file)
 		if err != nil {
 			log.Fatalf("cannot read %v", filename)
-			return false
 		}
 		file.Close()
 
-		kva := mapf(filename, string(content))
+		strSlice := mapf(filename, string(content))
+		intermediate = append(intermediate, strSlice...)
+	}
+	*/
+	
+	for _, filename := range filenames {
+		file, err := os.Open(filename)
+		if err != nil {
+			log.Fatalf("cannot open %v", filename)
+		}
+		content, err := ioutil.ReadAll(file)
+		if err != nil {
+			log.Fatalf("cannot read %v", filename)
+		}
+		file.Close()
 
-		intermediate = append(intermediate, kva...)
+		strSlice := mapf(filename, string(content))
+		intermediate = append(intermediate, strSlice...)
 	}
 
-	sort.Sort(ByKey(intermediate))
+	sort.Strings(intermediate)
 	oname := "mr-out-0"
 	ofile, _ := os.Create(oname)
 	defer ofile.Close()
 	
 	for _, v := range intermediate {
-		_,err := ofile.WriteString(v.Key+" "+v.Value+"\n")
+		_,err := ofile.WriteString(v+" "+strconv.Itoa(1)+"\n")
 		if err != nil {
 			fmt.Println("Error writing to file:", err)
             return false
@@ -86,7 +102,7 @@ func doMapf(mapf func(string, string) []KeyValue) bool{
 }
 
 //Reduce任务处理
-func doReducef(reducef func(string, []string) string) bool{
+func doReducef(reducef func(string, int) string) bool{
 	file,err := os.Open("mr-out-0")
 	if err != nil{
 		log.Fatal("doReducef error, file open error")

@@ -6,7 +6,7 @@ package main
 // go build -buildmode=plugin wc.go
 //
 
-import "6.824/mr"
+// import "6.824/mr"
 import "unicode"
 import "strings"
 import "strconv"
@@ -26,6 +26,7 @@ func Map(filename string, contents string) []string {
 	return strSlice
 }
 
+//直接返回单词频次
 func Reduce(key string,value int) string {
 	return strconv.Itoa(value)
 }

@@ -52,6 +52,8 @@ func main() {
 	oname := "mr-out-0"
 	ofile, _ := os.Create(oname)
 
+	defer ofile.Close()
+
 	//组装 统计word出现频次
 	i := 0
 	for i < len(intermediate) {
@@ -64,7 +66,6 @@ func main() {
 		i = j
 	}
 
-	ofile.Close()
 }
 
 func loadPlugin(filename string) (func(string, string) []string, func(string, int) string) {
