@@ -9,8 +9,7 @@ import "hash/fnv"
 import "os"
 import "io/ioutil"
 import "sort"
-import "bufio"
-import "strconv"
+import "strings"
 
 //
 // Map functions return a slice of KeyValue.
@@ -37,38 +36,22 @@ func ihash(key string) int {
 
 
 //
-func Worker(mapf func(string, string) []string, reducef func(string, int) string) {
+func Worker(mapf func(string, string) []string, reducef func([]string) string) {
 	mapStatus := doMapf(mapf)
-	if mapStatus {
-		
-	}else{
+	if !mapStatus {
 		log.Fatal("doMapf error")
 	}
-
+	reduceStatus := doReducef(reducef)
+	if !reduceStatus{
+		log.Fatal("doMapf error")
+	}
+	
 }
 
 //Map切分，输出为一个文件
 func doMapf(mapf func(string, string) []string) bool{
 	filenames := ReqFileName()
-
 	intermediate := []string{}
-	//遍历txt
-	/*
-	for _, filename := range os.Args[2:] {
-		file, err := os.Open(filename)
-		if err != nil {
-			log.Fatalf("cannot open %v", filename)
-		}
-		content, err := ioutil.ReadAll(file)
-		if err != nil {
-			log.Fatalf("cannot read %v", filename)
-		}
-		file.Close()
-
-		strSlice := mapf(filename, string(content))
-		intermediate = append(intermediate, strSlice...)
-	}
-	*/
 	
 	for _, filename := range filenames {
 		file, err := os.Open(filename)
@@ -91,7 +74,7 @@ func doMapf(mapf func(string, string) []string) bool{
 	defer ofile.Close()
 	
 	for _, v := range intermediate {
-		_,err := ofile.WriteString(v+" "+strconv.Itoa(1)+"\n")
+		_,err := ofile.WriteString(v+"\n")
 		if err != nil {
 			fmt.Println("Error writing to file:", err)
             return false
@@ -102,26 +85,37 @@ func doMapf(mapf func(string, string) []string) bool{
 }
 
 //Reduce任务处理
-func doReducef(reducef func(string, int) string) bool{
-	file,err := os.Open("mr-out-0")
-	if err != nil{
-		log.Fatal("doReducef error, file open error")
-		return false
+func doReducef(reducef func([]string) string) bool{
+	//读取文件
+	file, err := os.Open("mr-out-0")
+	if err != nil {
+		log.Fatalf("cannot open %v", "mr-out-0")
 	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", "mr-out-0")
+	}
+	file.Close()
 
-	defer file.Close()
+	//输出
+	contentStr := string(content)
+	words := strings.Fields(contentStr)
 
-	scanner := bufio.NewScanner(file)
-	// for scanner.Scan() {
-	// 	line := scanner.Text()
-		
-	// }
+	oname := "mr-out-1"
+	ofile, _ := os.Create(oname)
+	defer ofile.Close()
 
-	if err := scanner.Err(); err != nil {
-        fmt.Println("Error reading file:", err)
-        return false
-    }
-
+	i := 0
+	for i < len(words){
+		j := i+1
+		for j< len(words) && words[j] == words[i]{
+			j++
+		}
+		output := reducef(words[i:j])
+		fmt.Fprintf(ofile,"%v %v\n", words[i],output)
+		i=j
+	}
+	fmt.Println("do Reducef successfully.")
 	return true
 }
 

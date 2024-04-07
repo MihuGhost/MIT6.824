@@ -28,7 +28,7 @@ func main() {
 }
 
 //插件加载
-func loadPlugin(filename string) (func(string, string) []string, func(string, int) string) {
+func loadPlugin(filename string) (func(string, string) []string, func([]string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
 		log.Fatalf("cannot load plugin %v", err)
@@ -42,7 +42,7 @@ func loadPlugin(filename string) (func(string, string) []string, func(string, in
 	if err != nil {
 		log.Fatalf("cannot find Reduce in %v", filename)
 	}
-	reducef := xreducef.(func(string, int) string)
+	reducef := xreducef.(func([]string) string)
 
 	return mapf, reducef
 }

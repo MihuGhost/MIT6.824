@@ -26,7 +26,7 @@ func Map(filename string, contents string) []string {
 	return strSlice
 }
 
-//直接返回单词频次
-func Reduce(key string,value int) string {
-	return strconv.Itoa(value)
+//根据数组长度返回单词出现频次
+func Reduce(words []string) string {
+	return strconv.Itoa(len(words))
 }
