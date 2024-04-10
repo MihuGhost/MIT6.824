@@ -1,7 +1,5 @@
 package mr
 
-//go run -race mrworker.go wc.so
-
 import "fmt"
 import "log"
 import "net/rpc"
@@ -10,10 +8,8 @@ import "os"
 import "io/ioutil"
 import "sort"
 import "strings"
+import "time"
 
-//
-// Map functions return a slice of KeyValue.
-//
 type KeyValue struct {
 	Key   string
 	Value string
@@ -24,31 +20,50 @@ func (a ByKey) Len() int           { return len(a) }
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
-//
-// use ihash(key) % NReduce to choose the reduce
-// task number for each KeyValue emitted by Map.
-//
 func ihash(key string) int {
 	h := fnv.New32a()
 	h.Write([]byte(key))
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
-//
 func Worker(mapf func(string, string) []string, reducef func([]string) string) {
-	mapStatus := doMapf(mapf)
-	if !mapStatus {
-		log.Fatal("doMapf error")
+	for{
+		task := getTask()
+		switch task.TaskState {
+		case Map:
+			doMapf(mapf)
+		case Reduce:
+			doReducef(reducef)
+		case Wait:
+			time.Sleep(5 * time.Second)
+		case Exit:
+			return
+		}
 	}
-	reduceStatus := doReducef(reducef)
-	if !reduceStatus{
-		log.Fatal("doMapf error")
-	}
-	
 }
 
-//Map切分，输出为一个文件
+//获取任务
+func getTask() Task{
+	req := Req{}
+	task := Task{}
+	call("Coordinator.AssignTask",&req,&task)
+	return task
+}
+
+//获得文件名
+func ReqFileName() ([]string) {
+	req := Req{}
+	resp := Resp{}
+
+	ok := call("Coordinator.ProvideFileName", &req, &resp)
+	if ok {
+		return resp.Args
+	}else{
+		log.Fatal("ReqFileName error")
+	}
+	return nil
+}
+
 func doMapf(mapf func(string, string) []string) bool{
 	filenames := ReqFileName()
 	intermediate := []string{}
@@ -84,9 +99,8 @@ func doMapf(mapf func(string, string) []string) bool{
 	return true
 }
 
-//Reduce任务处理
+//
 func doReducef(reducef func([]string) string) bool{
-	//读取文件
 	file, err := os.Open("mr-out-0")
 	if err != nil {
 		log.Fatalf("cannot open %v", "mr-out-0")
@@ -97,7 +111,6 @@ func doReducef(reducef func([]string) string) bool{
 	}
 	file.Close()
 
-	//输出
 	contentStr := string(content)
 	words := strings.Fields(contentStr)
 
@@ -119,21 +132,7 @@ func doReducef(reducef func([]string) string) bool{
 	return true
 }
 
-//获得文件名
-func ReqFileName() ([]string) {
-	req := Req{}
-	resp := Resp{}
 
-	ok := call("Coordinator.ProvideFileName", &req, &resp)
-	if ok {
-		return resp.Args
-	}else{
-		log.Fatal("ReqFileName error")
-	}
-	return nil
-}
-
-//
 func call(rpcname string, args interface{}, reply interface{}) bool {
 	sockname := coordinatorSock()
 	c, err := rpc.DialHTTP("unix", sockname)

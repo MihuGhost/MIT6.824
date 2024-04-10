@@ -1,6 +1,5 @@
 package mr
 
-//go run -race mrcoordinator.go pg-*.txt
 import "fmt"
 import "log"
 import "net"
@@ -8,12 +7,60 @@ import "os"
 import "net/rpc"
 import "net/http"
 
-//1.命令行传入参数传给worker
-type Coordinator struct {
-	// Your definitions here.
+type State int
+
+const (
+	Map = 10
+	Reduce = 20
+	Wait = 30
+	Exit = 40
+)
+
+type MapTask struct{
+	TaskState State,
+	InputFIle string,
 }
 
-//获取文件名称
+type Coordinator struct {
+	InputFiles []string, 
+	TaskQueue chan *Task,
+}
+
+
+func MakeCoordinator(files []string, nReduce int) *Coordinator {
+	c := Coordinator{
+		InputFiles : files,
+		TaskQueue : make(chan, max(nReduce,len(files))),
+	}
+
+	//创建Map任务
+	//放入任务队列
+	c.CreateMapTask()
+
+	c.server()
+	return &c
+}
+
+//分配任务
+func (c *Coordinator) AssignTask(req *Req, task *Task) error{
+		if len(c.TaskQueue) > 0{
+			//有任务 -> 分配任务
+		} 
+		//没有任务
+}
+
+//创建Map任务
+func (c *Coordinator) CreateMapTask(){
+	for i,filename := range c.InputFiles{
+		mapTask := MapTask{
+			FileName : filename
+			TaskState :Map
+		}
+		//放入任务队列
+		c.TaskQueue <- &mapTask
+	}
+}
+
 func (c *Coordinator) ProvideFileName(req *Req, resp *Resp) error{
 		if len(os.Args) < 2 {
 			fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
@@ -26,11 +73,7 @@ func (c *Coordinator) ProvideFileName(req *Req, resp *Resp) error{
 		return nil
 }
 
-// Your code here -- RPC handlers for the worker to call.
 
-//
-// start a thread that listens for RPCs from worker.go
-//
 func (c *Coordinator) server() {
 	rpc.Register(c)
 	rpc.HandleHTTP()
@@ -43,28 +86,9 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
-//
-// main/mrcoordinator.go calls Done() periodically to find out
-// if the entire job has finished.
-//
 func (c *Coordinator) Done() bool {
-	// ret := false
 	ret := true
-	// Your code here.
+
 	return ret
 }
 
-//
-// create a Coordinator.
-// main/mrcoordinator.go calls this function.
-// nReduce is the number of reduce tasks to use.
-//
-func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
-
-	// Your code here.
-
-
-	c.server()
-	return &c
-}
