@@ -20,6 +20,8 @@ type Task struct{
 	TaskState State
 	InputFile string
 	IntermediateFiles []string //中间文件
+	NReduce int //nReduce
+	TaskNumber int //任务ID
 }
 
 type Coordinator struct {
@@ -27,6 +29,7 @@ type Coordinator struct {
 	TaskQueue chan *Task //任务队列
 	IntermediateFiles [][]string //Map产生nReduce份中间文件
 	TaskPhase State //Coordnator的阶段，确认退出还是等待
+	NReduce int //nReduce
 }
 
 
@@ -34,6 +37,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
 		InputFiles : files,
 		TaskQueue : make(chan *Task, max(nReduce,len(files))),
+		NReduce : nReduce,
 	}
 
 	//创建Map任务
@@ -68,10 +72,12 @@ func (c *Coordinator) AssignTask(req *Req, task *Task) error{
 
 //创建Map任务
 func (c *Coordinator) CreateMapTask(){
-	for _,filename := range c.InputFiles{
+	for index,filename := range c.InputFiles{
 		mapTask := Task{
 			InputFile : filename,
-			TaskState :Map,
+			TaskState : Map,
+			NReduce : c.NReduce,
+			TaskNumber : index,
 		}
 		//放入任务队列
 		c.TaskQueue <- &mapTask

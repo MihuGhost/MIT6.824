@@ -5,7 +5,7 @@ import "log"
 import "net/rpc"
 import "hash/fnv"
 import "time"
-// import "os"
+import "os"
 // import "io/ioutil"
 // import "sort"
 // import "strings"
@@ -52,6 +52,22 @@ func getTask() Task{
 }
 
 func doMapf(mapf func(string, string) []KeyValue,task *Task) bool{
+	intermediates := []mr.KeyValue{}
+	file, err := os.Open(task.InputFile)
+	//map任务
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+	intermediates = append(intermediates, kva...)
+	
+	//写入本地并将地址发送给coordinator
+	locations := writeToLocal(intermediates, task.TaskNumber, task.NReduce)
 
 	return true
 }
@@ -62,6 +78,31 @@ func doReducef(reducef func(string, []string) string,task *Task) bool{
 	return true
 }
 
+//分为nReduce份写入本地,返回地址
+func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
+	buffers := make([][]KeyValue,nReduce)
+	for _, intermediate := range intermediates {
+		salt := ihash(intermediate.Key) % nReduce
+		buffers[salt] = append(buffers[salt],intermediate)
+	}
+
+	locations := make([]string, nReduce)
+	for i, buffer := range buffers {
+		dir, _ := os.Getwd()
+		file, err := os.Create("mr-%d-%d", taskNumber, nReduce)
+		if err != nil{
+			og.Fatal("writeToLocal[os.Create]:", err)
+		}
+		defer file.Close
+
+		_,err := file.Write("%v %v\n",buffer.Key,buffer.Value)
+		if err != nil{
+			og.Fatal("writeToLocal[file.Write]:", err)
+		}
+		locations = append(locations,filepath.Join(dir,file.Name()))
+	}
+	return locations
+}
 
 func call(rpcname string, args interface{}, reply interface{}) bool {
 	sockname := coordinatorSock()
