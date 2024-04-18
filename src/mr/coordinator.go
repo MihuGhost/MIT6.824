@@ -10,27 +10,30 @@ import "net/http"
 type State int
 
 const (
-	Map = 10
-	Reduce = 20
-	Wait = 30
-	Exit = 40
+	Map State = iota
+	Reduce
+	Wait
+	Exit
 )
 
-type MapTask struct{
-	TaskState State,
-	InputFIle string,
+type Task struct{
+	TaskState State
+	InputFile string
+	IntermediateFiles []string //中间文件
 }
 
 type Coordinator struct {
-	InputFiles []string, 
-	TaskQueue chan *Task,
+	InputFiles []string  //输入文件
+	TaskQueue chan *Task //任务队列
+	IntermediateFiles [][]string //Map产生nReduce份中间文件
+	TaskPhase State //Coordnator的阶段，确认退出还是等待
 }
 
 
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
 		InputFiles : files,
-		TaskQueue : make(chan, max(nReduce,len(files))),
+		TaskQueue : make(chan *Task, max(nReduce,len(files))),
 	}
 
 	//创建Map任务
@@ -41,23 +44,49 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	return &c
 }
 
+func max(a,b int)int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 //分配任务
 func (c *Coordinator) AssignTask(req *Req, task *Task) error{
-		if len(c.TaskQueue) > 0{
-			//有任务 -> 分配任务
-		} 
-		//没有任务
+	if len(c.TaskQueue) > 0{
+		//有任务 -> 分配任务
+		*task = *<-c.TaskQueue
+	} else if c.TaskPhase == Exit{
+		//是否结束所有任务
+		*task = Task{TaskState : Exit}
+	} else{
+		//未结束，无任务
+		*task = Task{TaskState : Wait}
+	}
+	return nil
 }
 
 //创建Map任务
 func (c *Coordinator) CreateMapTask(){
-	for i,filename := range c.InputFiles{
-		mapTask := MapTask{
-			FileName : filename
-			TaskState :Map
+	for _,filename := range c.InputFiles{
+		mapTask := Task{
+			InputFile : filename,
+			TaskState :Map,
 		}
 		//放入任务队列
 		c.TaskQueue <- &mapTask
+	}
+}
+
+//创建Reduce任务
+func (c *Coordinator) CreateReduceTask(){
+	for _, files := range c.IntermediateFiles {
+		reduceTask := Task{
+			TaskState : Reduce,
+			IntermediateFiles : files,	
+		}
+		//放入任务队列
+		c.TaskQueue <- &reduceTask
 	}
 }
 

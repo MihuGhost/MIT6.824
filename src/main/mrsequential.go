@@ -23,7 +23,6 @@ func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 func main() {
-	//接收命令行参数
 	if len(os.Args) < 3 {
 		fmt.Fprintf(os.Stderr, "Usage: mrsequential xxx.so inputfiles...\n")
 		os.Exit(1)
@@ -31,8 +30,12 @@ func main() {
 
 	mapf, reducef := loadPlugin(os.Args[1])
 
-	intermediate := []string{}
-	//遍历txt
+	//
+	// read each input file,
+	// pass it to Map,
+	// accumulate the intermediate Map output.
+	//
+	intermediate := []mr.KeyValue{}
 	for _, filename := range os.Args[2:] {
 		file, err := os.Open(filename)
 		if err != nil {
@@ -43,46 +46,64 @@ func main() {
 			log.Fatalf("cannot read %v", filename)
 		}
 		file.Close()
-
-		strSlice := mapf(filename, string(content))
-		intermediate = append(intermediate, strSlice...)
+		kva := mapf(filename, string(content))
+		intermediate = append(intermediate, kva...)
 	}
 
-	sort.Strings(intermediate)
+	//
+	// a big difference from real MapReduce is that all the
+	// intermediate data is in one place, intermediate[],
+	// rather than being partitioned into NxM buckets.
+	//
+
+	sort.Sort(ByKey(intermediate))
+
 	oname := "mr-out-0"
 	ofile, _ := os.Create(oname)
 
-	defer ofile.Close()
-
-	//组装 统计word出现频次
+	//
+	// call Reduce on each distinct key in intermediate[],
+	// and print the result to mr-out-0.
+	//
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
-		for j < len(intermediate) && intermediate[j] == intermediate[i] {
+		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
 			j++
 		}
-		output := reducef(intermediate[i:j])
-		fmt.Fprintf(ofile, "%v %v\n", intermediate[i], output)
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, intermediate[k].Value)
+		}
+		output := reducef(intermediate[i].Key, values)
+
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
 		i = j
 	}
 
+	ofile.Close()
 }
 
-func loadPlugin(filename string) (func(string, string) []string, func([]string) string) {
+// load the application Map and Reduce functions
+// from a plugin file, e.g. ../mrapps/wc.so
+func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
-		log.Fatalf("cannot load plugin %v", err)
+		fmt.Println(err)
+		log.Fatalf("cannot load plugin %v", filename)
 	}
 	xmapf, err := p.Lookup("Map")
 	if err != nil {
 		log.Fatalf("cannot find Map in %v", filename)
 	}
-	mapf := xmapf.(func(string, string) []string)
+	mapf := xmapf.(func(string, string) []mr.KeyValue)
 	xreducef, err := p.Lookup("Reduce")
 	if err != nil {
 		log.Fatalf("cannot find Reduce in %v", filename)
 	}
-	reducef := xreducef.(func([]string) string)
+	reducef := xreducef.(func(string, []string) string)
 
 	return mapf, reducef
 }

@@ -4,11 +4,12 @@ import "fmt"
 import "log"
 import "net/rpc"
 import "hash/fnv"
-import "os"
-import "io/ioutil"
-import "sort"
-import "strings"
 import "time"
+// import "os"
+// import "io/ioutil"
+// import "sort"
+// import "strings"
+
 
 type KeyValue struct {
 	Key   string
@@ -26,14 +27,14 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-func Worker(mapf func(string, string) []string, reducef func([]string) string) {
+func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 	for{
 		task := getTask()
 		switch task.TaskState {
 		case Map:
-			doMapf(mapf)
+			doMapf(mapf, &task)
 		case Reduce:
-			doReducef(reducef)
+			doReducef(reducef, &task)
 		case Wait:
 			time.Sleep(5 * time.Second)
 		case Exit:
@@ -50,85 +51,14 @@ func getTask() Task{
 	return task
 }
 
-//获得文件名
-func ReqFileName() ([]string) {
-	req := Req{}
-	resp := Resp{}
+func doMapf(mapf func(string, string) []KeyValue,task *Task) bool{
 
-	ok := call("Coordinator.ProvideFileName", &req, &resp)
-	if ok {
-		return resp.Args
-	}else{
-		log.Fatal("ReqFileName error")
-	}
-	return nil
-}
-
-func doMapf(mapf func(string, string) []string) bool{
-	filenames := ReqFileName()
-	intermediate := []string{}
-	
-	for _, filename := range filenames {
-		file, err := os.Open(filename)
-		if err != nil {
-			log.Fatalf("cannot open %v", filename)
-		}
-		content, err := ioutil.ReadAll(file)
-		if err != nil {
-			log.Fatalf("cannot read %v", filename)
-		}
-		file.Close()
-
-		strSlice := mapf(filename, string(content))
-		intermediate = append(intermediate, strSlice...)
-	}
-
-	sort.Strings(intermediate)
-	oname := "mr-out-0"
-	ofile, _ := os.Create(oname)
-	defer ofile.Close()
-	
-	for _, v := range intermediate {
-		_,err := ofile.WriteString(v+"\n")
-		if err != nil {
-			fmt.Println("Error writing to file:", err)
-            return false
-		}
-	}
-	fmt.Println("DoMapf successfully.")
 	return true
 }
 
 //
-func doReducef(reducef func([]string) string) bool{
-	file, err := os.Open("mr-out-0")
-	if err != nil {
-		log.Fatalf("cannot open %v", "mr-out-0")
-	}
-	content, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatalf("cannot read %v", "mr-out-0")
-	}
-	file.Close()
+func doReducef(reducef func(string, []string) string,task *Task) bool{
 
-	contentStr := string(content)
-	words := strings.Fields(contentStr)
-
-	oname := "mr-out-1"
-	ofile, _ := os.Create(oname)
-	defer ofile.Close()
-
-	i := 0
-	for i < len(words){
-		j := i+1
-		for j< len(words) && words[j] == words[i]{
-			j++
-		}
-		output := reducef(words[i:j])
-		fmt.Fprintf(ofile,"%v %v\n", words[i],output)
-		i=j
-	}
-	fmt.Println("do Reducef successfully.")
 	return true
 }
 
