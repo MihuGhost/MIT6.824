@@ -14,4 +14,3 @@ go build -race -buildmode=plugin -gcflags="all=-N -l"  ../mrapps/wc.go
 
 https://github.com/MihuGhost/MIT6.824.git
 
-插入sh文件，修改写入本地文件名的函数

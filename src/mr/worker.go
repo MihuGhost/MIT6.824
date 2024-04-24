@@ -48,12 +48,12 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 //获取任务
 func getTask() Task{
 	req := Req{}
-	task := Task{}
-	call("Coordinator.AssignTask",&req,&task)
-	return task
+	resp := Task{}
+	call("Coordinator.AssignTask",&req,&resp)
+	return resp
 }
 
-func doMapf(mapf func(string, string) []KeyValue,task *Task) bool{
+func doMapf(mapf func(string, string) []KeyValue,task *Task){
 	intermediates := []KeyValue{}
 	file, err := os.Open(task.InputFile)
 	//map任务
@@ -69,10 +69,9 @@ func doMapf(mapf func(string, string) []KeyValue,task *Task) bool{
 	intermediates = append(intermediates, kva...)
 	
 	//写入本地并将地址发送给coordinator
-	locations := writeToLocal(intermediates, task.TaskNumber, task.NReduce)
-
-	fmt.Println(locations)
-	return true
+	task.IntermediateFiles = writeToLocal(intermediates, task.TaskNumber, task.NReduce)
+	//map任务结束通知master
+	taskCompleted(task)
 }
 
 //
@@ -81,9 +80,14 @@ func doReducef(reducef func(string, []string) string,task *Task) bool{
 	return true
 }
 
+//任务结束通知Master
+func taskCompleted(task *Task){
+	resp := Resp{}
+	call("Coordinator.TaskCompleted",task,&resp)
+}
+
 //分为nReduce份写入本地,返回地址
 func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
-
 	buffers := make([][]KeyValue,nReduce)
 	for _, intermediate := range intermediates {
 		salt := ihash(intermediate.Key) % nReduce
@@ -116,10 +120,8 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	defer c.Close()
 
 	err = c.Call(rpcname, args, reply)
-	if err == nil {
-		return true
+	if err != nil {
+		log.Fatal("dialing:", err)
 	}
-
-	fmt.Println(err)
-	return false
+	return true
 }
