@@ -1,6 +1,6 @@
 package mr
 
-import "fmt"
+// import "fmt"
 import "log"
 import "net"
 import "os"
@@ -8,6 +8,7 @@ import "net/rpc"
 import "net/http"
 
 type State int
+type Status int
 
 const (
 	Map State = iota
@@ -46,7 +47,9 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		InputFiles : files,
 		TaskQueue : make(chan *Task, max(nReduce,len(files))),
 		NReduce : nReduce,
+		TaskPhase: Map,
 		TaskPool : make([]*Task, max(nReduce,len(files))),
+		IntermediateFiles: make([][]string,max(nReduce,len(files))),
 	}
 
 	//创建Map任务
@@ -120,7 +123,7 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	switch task.TaskState{
 	case Map:
 		c.IntermediateFiles[task.TaskNumber] = task.IntermediateFiles
-		if allTaskDone(){
+		if c.allTaskDone(){
 			//创建Reduce任务
 			c.CreateReduceTask()
 			c.TaskPhase = Reduce
@@ -128,12 +131,12 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	case Reduce:
 		//todo: 输出处理
 		
-		if allTaskDone(){
+		if c.allTaskDone(){
 			c.TaskPhase = Exit
 		}	
 	}
 
-
+	return nil
 }
 
 //判断当前任务是否全部完成
