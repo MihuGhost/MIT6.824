@@ -49,7 +49,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		NReduce : nReduce,
 		TaskPhase: Map,
 		TaskPool : make([]*Task, max(nReduce,len(files))),
-		IntermediateFiles: make([][]string,max(nReduce,len(files))),
+		IntermediateFiles: make([][]string,nReduce), //限制为NReduce个Reduce任务
 	}
 
 	//创建Map任务
@@ -122,7 +122,10 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	//处理中间文件
 	switch task.TaskState{
 	case Map:
-		c.IntermediateFiles[task.TaskNumber] = task.IntermediateFiles
+		//NReduce份临时文件集
+		for nReduceID, filepath := range task.IntermediateFiles {
+			c.IntermediateFiles[nReduceID] = append(c.IntermediateFiles[nReduceID],filepath)
+		}
 		if c.allTaskDone(){
 			//创建Reduce任务
 			c.CreateReduceTask()
@@ -139,7 +142,7 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	return nil
 }
 
-//判断当前任务是否全部完成
+//判断任务池中是否全部完成
 func (c *Coordinator)allTaskDone() bool{
 	for _, task := range c.TaskPool {
 		if task.TaskStatus != Completed{

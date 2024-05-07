@@ -9,6 +9,7 @@ import "os"
 import "io/ioutil"
 import "strconv"
 import "path/filepath"
+import "encoding/json"
 // import "sort"
 // import "strings"
 
@@ -74,8 +75,34 @@ func doMapf(mapf func(string, string) []KeyValue,task *Task){
 	taskCompleted(task)
 }
 
-//
+//todo 处理Reduce任务
 func doReducef(reducef func(string, []string) string,task *Task) bool{
+	intermediate := ReadFromLocal(task.IntermediateFiles)
+
+	sort.Sort(ByKey(intermediate))
+
+	oname := "mr-out-0"
+	ofile, _ := os.Create(oname)
+
+	i := 0
+	for i < len(intermediate) {
+		j := i + 1
+		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, intermediate[k].Value)
+		}
+		output := reducef(intermediate[i].Key, values)
+
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+		i = j
+	}
+
+	ofile.Close()
 
 	return true
 }
@@ -97,18 +124,47 @@ func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
 	locations := make([]string, nReduce)
 	for i, buffer := range buffers {
 		dir, _ := os.Getwd()
-		file, err := os.Create("mr-"+strconv.Itoa(taskNumber)+"-"+strconv.Itoa(i))
+		tempFile,err := ioutil.TempFile(dir, "mr-temp-*")
 		if err != nil{
-			log.Fatal("writeToLocal[os.Create]:", err)
+			log.Fatal("writeToLocal[ioutil.TempFile]:", err)
 		}
-		for _, subBuffer := range buffer {
-			fmt.Fprintf(file, "%v %v\n", subBuffer.Key, subBuffer.Value)
+
+		enc:=json.NewEncoder(tempFile)
+		for _, kv := buffer {
+			err := enc.Encode(&kv)
+			if err != nil{
+				log.Fatal("writeToLocal[enc.Encode]:", err)
+			}
 		}
-		file.Close()
-		locations = append(locations,filepath.Join(dir,file.Name()))
+		tempFile.Close()
+
+		fileName :=  fmt.Sprintf("mr-%d-%d",strconv.Itoa(taskNumber),strconv.Itoa(i))
+		os.Rename(tempFile.Name(),fileName)
+
+		locations = append(locations,filepath.Join(dir,fileName))
 	}
 
 	return locations
+}
+
+func ReadFromLocal(files []string) []mr.KeyValue{
+	for _, filepath := range files {
+		file, err := os.Open(filepath)
+		if err != nil{
+			log.Fatal("ReadFromLocal:", err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		intermediate := []mr.KeyValue{}
+		for scanner.Scan() {
+			parts := strings.Split(scanner.Text(), " ")
+			key := parts[0]
+			kv := mr.KeyValue{key, "1"}
+			intermediate = append(intermediate, kv)
+		}
+	}
+	return intermediate
 }
 
 func call(rpcname string, args interface{}, reply interface{}) bool {
