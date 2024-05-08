@@ -101,10 +101,11 @@ func (c *Coordinator) CreateMapTask(){
 
 //创建Reduce任务
 func (c *Coordinator) CreateReduceTask(){
-	for _, files := range c.IntermediateFiles {
+	for i, files := range c.IntermediateFiles {
 		reduceTask := Task{
 			TaskState : Reduce,
 			IntermediateFiles : files,	
+			TaskNumber : i,
 		}
 		//放入任务队列
 		c.TaskQueue <- &reduceTask
@@ -132,13 +133,10 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 			c.TaskPhase = Reduce
 		}
 	case Reduce:
-		//todo: 输出处理
-		
 		if c.allTaskDone(){
 			c.TaskPhase = Exit
 		}	
 	}
-
 	return nil
 }
 
@@ -165,7 +163,7 @@ func (c *Coordinator) server() {
 }
 
 func (c *Coordinator) Done() bool {
-	ret := true
+	ret := c.TaskPhase == Exit
 
 	return ret
 }
