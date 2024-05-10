@@ -124,7 +124,9 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	switch task.TaskState{
 	case Map:
 		//NReduce份临时文件集
+		log.Println(len(task.IntermediateFiles))
 		for nReduceID, filepath := range task.IntermediateFiles {
+			log.Printf("%v %v",nReduceID,filepath)
 			c.IntermediateFiles[nReduceID] = append(c.IntermediateFiles[nReduceID],filepath)
 		}
 		if c.allTaskDone(){

@@ -103,7 +103,7 @@ func doReducef(reducef func(string, []string) string,task *Task){
 	}
 
 	tempFile.Close()
-	fileName :=  fmt.Sprintf("mr-out-%d",strconv.Itoa(taskNumber))
+	fileName :=  fmt.Sprintf("mr-out-%d",strconv.Itoa(task.TaskNumber))
 	os.Rename(tempFile.Name(),fileName)
 	taskCompleted(task)
 }
@@ -118,12 +118,12 @@ func taskCompleted(task *Task){
 func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
 	buffers := make([][]KeyValue,nReduce)
 	for _, intermediate := range intermediates {
-		salt := ihash(intermediate.Key) % nReduce
-		buffers[salt] = append(buffers[salt],intermediate)
+		slot := ihash(intermediate.Key) % nReduce
+		buffers[slot] = append(buffers[slot],intermediate)
 	}
 
-	locations := make([]string, nReduce)
-	for i, _ := range buffers {
+	locations := make([]string, 0)
+	for i, buffer := range buffers {
 		dir, _ := os.Getwd()
 		tempFile,err := ioutil.TempFile(dir, "mr-temp-*")
 		if err != nil{
@@ -131,7 +131,7 @@ func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
 		}
 
 		enc:=json.NewEncoder(tempFile)
-		for _, kv := buffers[i] {
+		for _, kv := range buffer {
 			err := enc.Encode(&kv)
 			if err != nil{
 				log.Fatal("writeToLocal[enc.Encode]:", err)
@@ -139,16 +139,18 @@ func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
 		}
 		tempFile.Close()
 
-		fileName :=  fmt.Sprintf("mr-%d-%d",strconv.Itoa(taskNumber),strconv.Itoa(i))
+		fileName :=  fmt.Sprintf("mr-%d-%d",taskNumber,i)
 		os.Rename(tempFile.Name(),fileName)
 
 		locations = append(locations,filepath.Join(dir,fileName))
 	}
 
+	log.Printf("locations length %v",len(locations))
 	return locations
 }
 
-func ReadFromLocal(files []string) []mr.KeyValue{
+func ReadFromLocal(files []string) []KeyValue{
+	kva := []KeyValue{}
 	for _, filepath := range files {
 		file, err := os.Open(filepath)
 		if err != nil{
@@ -156,7 +158,6 @@ func ReadFromLocal(files []string) []mr.KeyValue{
 		}
 		defer file.Close()
 
-		kva := []mr.KeyValue{}
 		dec := json.NewDecoder(file)
 		for {
 			var kv KeyValue
@@ -173,13 +174,13 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	sockname := coordinatorSock()
 	c, err := rpc.DialHTTP("unix", sockname)
 	if err != nil {
-		log.Fatal("dialing:", err)
+		log.Fatal("rpc.DialHTTP:", err)
 	}
 	defer c.Close()
 
 	err = c.Call(rpcname, args, reply)
 	if err != nil {
-		log.Fatal("dialing:", err)
+		log.Fatal("c.Call:", err)
 	}
 	return true
 }
