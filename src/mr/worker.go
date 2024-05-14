@@ -73,7 +73,6 @@ func doMapf(mapf func(string, string) []KeyValue,task *Task){
 	taskCompleted(task)
 }
 
-//todo 处理Reduce任务
 func doReducef(reducef func(string, []string) string,task *Task){
 	intermediate := ReadFromLocal(task.IntermediateFiles)
 
@@ -144,8 +143,6 @@ func writeToLocal(intermediates []KeyValue,taskNumber,nReduce int) []string{
 
 		locations = append(locations,filepath.Join(dir,fileName))
 	}
-
-	log.Printf("locations length %v",len(locations))
 	return locations
 }
 

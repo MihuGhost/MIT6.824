@@ -31,6 +31,7 @@ else
     # no timeout command
     TIMEOUT=
     echo '*** Cannot find timeout command; proceeding without timeouts.'
+    exit 1
   fi
 fi
 if [ "$TIMEOUT" != "" ]
@@ -95,6 +96,7 @@ else
   echo '---' wc output is not the same as mr-correct-wc.txt
   echo '---' wc test: FAIL
   failed_any=1
+  exit 1
 fi
 
 # wait for remaining workers and coordinator to exit.

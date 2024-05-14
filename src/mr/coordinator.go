@@ -95,12 +95,14 @@ func (c *Coordinator) CreateMapTask(){
 		//放入任务队列
 		c.TaskQueue <- &mapTask
 		//放入任务池
+		//todo 任务池有错，修改task状态的改变
 		c.TaskPool[index] = &mapTask
 	}
 }
 
 //创建Reduce任务
 func (c *Coordinator) CreateReduceTask(){
+	log.Println("Reduce任务创建成功")
 	for i, files := range c.IntermediateFiles {
 		reduceTask := Task{
 			TaskState : Reduce,
@@ -119,17 +121,16 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 	}
 	//处理任务状态
 	task.TaskStatus = Completed
-	
+	log.Printf("任务完成时任务状态%d",task.TaskStatus)
 	//处理中间文件
 	switch task.TaskState{
 	case Map:
 		//NReduce份临时文件集
-		log.Println(len(task.IntermediateFiles))
 		for nReduceID, filepath := range task.IntermediateFiles {
-			log.Printf("%v %v",nReduceID,filepath)
 			c.IntermediateFiles[nReduceID] = append(c.IntermediateFiles[nReduceID],filepath)
 		}
 		if c.allTaskDone(){
+			log.Println("Map任务处理完毕")
 			//创建Reduce任务
 			c.CreateReduceTask()
 			c.TaskPhase = Reduce
@@ -144,7 +145,9 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 
 //判断任务池中是否全部完成
 func (c *Coordinator)allTaskDone() bool{
+	log.Println("任务池中是否全部完成")
 	for _, task := range c.TaskPool {
+		log.Printf("任务状态%d",task.TaskStatus)
 		if task.TaskStatus != Completed{
 			return false
 		}
