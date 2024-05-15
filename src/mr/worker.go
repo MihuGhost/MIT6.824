@@ -7,7 +7,7 @@ import "hash/fnv"
 import "time"
 import "os"
 import "io/ioutil"
-import "strconv"
+// import "strconv"
 import "path/filepath"
 import "encoding/json"
 import "sort"
@@ -102,7 +102,7 @@ func doReducef(reducef func(string, []string) string,task *Task){
 	}
 
 	tempFile.Close()
-	fileName :=  fmt.Sprintf("mr-out-%d",strconv.Itoa(task.TaskNumber))
+	fileName :=  fmt.Sprintf("mr-out-%d",task.TaskNumber)
 	os.Rename(tempFile.Name(),fileName)
 	taskCompleted(task)
 }

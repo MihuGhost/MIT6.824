@@ -6,9 +6,11 @@ import "net"
 import "os"
 import "net/rpc"
 import "net/http"
-
+import "sync"
 type State int
 type Status int
+
+var mu sync.Mutex
 
 const (
 	Map State = iota
@@ -38,7 +40,7 @@ type Coordinator struct {
 	IntermediateFiles [][]string //Map产生nReduce份中间文件
 	TaskPhase State //Coordnator阶段
 	NReduce int //nReduce
-	TaskPool []*Task //任务池，记录任务完成状态
+	TaskPool map[int]Status //任务池，记录任务完成状态
 }
 
 
@@ -48,7 +50,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		TaskQueue : make(chan *Task, max(nReduce,len(files))),
 		NReduce : nReduce,
 		TaskPhase: Map,
-		TaskPool : make([]*Task, max(nReduce,len(files))),
+		TaskPool : make(map[int]Status),
 		IntermediateFiles: make([][]string,nReduce), //限制为NReduce个Reduce任务
 	}
 
@@ -68,10 +70,12 @@ func max(a,b int)int {
 
 //分配任务
 func (c *Coordinator) AssignTask(req *Req, task *Task) error{
+	mu.Lock()
+	defer mu.Unlock()
 	if len(c.TaskQueue) > 0{
 		//有任务 -> 分配任务
 		*task = *<-c.TaskQueue
-		c.TaskPool[task.TaskNumber].TaskStatus = Inprogress
+		c.TaskPool[task.TaskNumber] = Inprogress
 	} else if c.TaskPhase == Exit{
 		//是否结束所有任务
 		*task = Task{TaskState : Exit}
@@ -95,9 +99,9 @@ func (c *Coordinator) CreateMapTask(){
 		//放入任务队列
 		c.TaskQueue <- &mapTask
 		//放入任务池
-		//todo 任务池有错，修改task状态的改变
-		c.TaskPool[index] = &mapTask
+		c.TaskPool[index] = Init
 	}
+	log.Println(c.TaskPool)
 }
 
 //创建Reduce任务
@@ -111,17 +115,19 @@ func (c *Coordinator) CreateReduceTask(){
 		}
 		//放入任务队列
 		c.TaskQueue <- &reduceTask
+		c.TaskPool[i] = Init
 	}
 }
 
 //worker任务完成
 func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
+	mu.Lock()
+	defer mu.Unlock()
 	if c.TaskPhase != task.TaskState || task.TaskStatus == Completed {
 		return nil
 	}
 	//处理任务状态
-	task.TaskStatus = Completed
-	log.Printf("任务完成时任务状态%d",task.TaskStatus)
+	c.TaskPool[task.TaskNumber] = Completed
 	//处理中间文件
 	switch task.TaskState{
 	case Map:
@@ -145,10 +151,8 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 
 //判断任务池中是否全部完成
 func (c *Coordinator)allTaskDone() bool{
-	log.Println("任务池中是否全部完成")
-	for _, task := range c.TaskPool {
-		log.Printf("任务状态%d",task.TaskStatus)
-		if task.TaskStatus != Completed{
+	for _, status := range c.TaskPool {
+		if status != Completed{
 			return false
 		}
 	}
@@ -168,8 +172,9 @@ func (c *Coordinator) server() {
 }
 
 func (c *Coordinator) Done() bool {
+	mu.Lock()
+	defer mu.Unlock()
 	ret := c.TaskPhase == Exit
-
 	return ret
 }
 
