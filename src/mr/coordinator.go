@@ -1,12 +1,13 @@
 package mr
 
-// import "fmt"
 import "log"
 import "net"
 import "os"
 import "net/rpc"
 import "net/http"
 import "sync"
+import "time"
+
 type State int
 type Status int
 
@@ -32,6 +33,7 @@ type Task struct{
 	NReduce int //nReduce
 	TaskNumber int //任务ID
 	TaskStatus Status //任务完成状态 初始化、正进行、已完成
+	StartTime time.Time
 }
 
 type Coordinator struct {
@@ -40,9 +42,12 @@ type Coordinator struct {
 	IntermediateFiles [][]string //Map产生nReduce份中间文件
 	TaskPhase State //Coordnator阶段
 	NReduce int //nReduce
-	TaskPool map[int]Status //任务池，记录任务完成状态
+	TaskPool map[int]*Task //任务池，记录任务完成状态，检查任务是否超时
 }
 
+//todo backup tasks
+//10s 等待时长
+//任务崩溃时，从任务池中取出崩溃前的任务分配
 
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
@@ -50,15 +55,34 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		TaskQueue : make(chan *Task, max(nReduce,len(files))),
 		NReduce : nReduce,
 		TaskPhase: Map,
-		TaskPool : make(map[int]Status),
-		IntermediateFiles: make([][]string,nReduce), //限制为NReduce个Reduce任务
+		TaskPool : make(map[int]*Task),
+		IntermediateFiles: make([][]string,len(files)), //限制为X个Reduce任务，X为输入文件数量
 	}
 
 	//创建Map任务
 	c.CreateMapTask()
-
 	c.server()
+
+	go c.checkCrash()
 	return &c
+}
+
+func (c *Coordinator) checkCrash(){
+	for{
+		time.Sleep(5 * time.Second)
+		mu.Lock()
+		if c.TaskPhase == Exit{
+			mu.Unlock()
+			return
+		}
+
+		for _, task := range c.TaskPool {
+			if task.TaskStatus == Inprogress && time.Now().Sub(task.StartTime) > 10*time.Second{
+				c.TaskQueue <- c.TaskPool[task.TaskNumber]
+			}
+		}
+		mu.Unlock()
+	}
 }
 
 func max(a,b int)int {
@@ -75,7 +99,8 @@ func (c *Coordinator) AssignTask(req *Req, task *Task) error{
 	if len(c.TaskQueue) > 0{
 		//有任务 -> 分配任务
 		*task = *<-c.TaskQueue
-		c.TaskPool[task.TaskNumber] = Inprogress
+		task.TaskStatus = Inprogress
+		c.TaskPool[task.TaskNumber] = task
 	} else if c.TaskPhase == Exit{
 		//是否结束所有任务
 		*task = Task{TaskState : Exit}
@@ -95,27 +120,29 @@ func (c *Coordinator) CreateMapTask(){
 			NReduce : c.NReduce,
 			TaskNumber : index,
 			TaskStatus : Init,
+			StartTime : time.Now(),
 		}
 		//放入任务队列
 		c.TaskQueue <- &mapTask
 		//放入任务池
-		c.TaskPool[index] = Init
+		c.TaskPool[index] = &mapTask
 	}
-	log.Println(c.TaskPool)
 }
 
 //创建Reduce任务
 func (c *Coordinator) CreateReduceTask(){
-	log.Println("Reduce任务创建成功")
-	for i, files := range c.IntermediateFiles {
+	for index, files := range c.IntermediateFiles {
 		reduceTask := Task{
 			TaskState : Reduce,
 			IntermediateFiles : files,	
-			TaskNumber : i,
+			TaskNumber : index,
+			StartTime : time.Now(),
+			TaskStatus : Init,
 		}
 		//放入任务队列
 		c.TaskQueue <- &reduceTask
-		c.TaskPool[i] = Init
+		reduceTask.TaskStatus = Inprogress
+		c.TaskPool[index] = &reduceTask
 	}
 }
 
@@ -127,16 +154,16 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 		return nil
 	}
 	//处理任务状态
-	c.TaskPool[task.TaskNumber] = Completed
+	c.TaskPool[task.TaskNumber].TaskStatus = Completed
 	//处理中间文件
 	switch task.TaskState{
 	case Map:
 		//NReduce份临时文件集
 		for nReduceID, filepath := range task.IntermediateFiles {
-			c.IntermediateFiles[nReduceID] = append(c.IntermediateFiles[nReduceID],filepath)
+			index := nReduceID % len(c.InputFiles)
+			c.IntermediateFiles[index] = append(c.IntermediateFiles[index],filepath)
 		}
 		if c.allTaskDone(){
-			log.Println("Map任务处理完毕")
 			//创建Reduce任务
 			c.CreateReduceTask()
 			c.TaskPhase = Reduce
@@ -151,8 +178,8 @@ func (c *Coordinator)TaskCompleted(task *Task,resp *Resp) error {
 
 //判断任务池中是否全部完成
 func (c *Coordinator)allTaskDone() bool{
-	for _, status := range c.TaskPool {
-		if status != Completed{
+	for _, task := range c.TaskPool {
+		if task.TaskStatus != Completed{
 			return false
 		}
 	}
